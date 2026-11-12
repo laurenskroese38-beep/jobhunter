@@ -67,7 +67,8 @@ def search(cfg: dict, sleep=time.sleep, scrape_jobs=None, state: dict | None = N
     names = {f"JobSpy:{n}" for n in ("LinkedIn", "Indeed", "Google", "Glassdoor",
                                      "ZipRecruiter", "Bayt", "Naukri", "BDJobs")}
     names |= {n for n in logging.root.manager.loggerDict if n.startswith("JobSpy")}
-    loggers = [logging.getLogger(n) for n in names]
+    # certaines versions de JobSpy journalisent le 429 via le logger racine
+    loggers = [logging.getLogger(n) for n in names] + [logging.getLogger()]
     for lg in loggers:
         lg.addHandler(watcher)
     try:
@@ -101,6 +102,7 @@ def _with_timeout(fn, kwargs, timeout):
 def _run(scrape_jobs, cfg, sites, terms, locations, lo, hi, sleep,
          disabled, empty_streak, max_empty, watcher, done, limited=None):
     limited = limited if limited is not None else set()
+    hits: dict[str, int] = {}
     out: list[dict] = []
     first = True
 
@@ -155,9 +157,16 @@ def _run(scrape_jobs, cfg, sites, terms, locations, lo, hi, sleep,
             done.add((site, term, loc))
         log.info("JobSpy %-8s %-32r → %d offres", site, term, n)
         if watcher.hit:
-            log.warning("%s signale une limitation : désactivé pour ce passage", site)
-            disabled.add(site)
-            limited.add(site)
+            limited.add(site)              # cette recherche sera refaite plus tard
+            hits[site] = hits.get(site, 0) + 1
+            if n == 0 or hits[site] >= 2:
+                log.warning("%s signale une limitation : désactivé pour ce passage", site)
+                disabled.add(site)
+            else:
+                log.warning("%s : limitation passagère (résultats partiels), recherche "
+                            "refaite plus tard", site)
+        else:
+            hits[site] = 0
         if not n:
             empty_streak[site] = empty_streak.get(site, 0) + 1
             if empty_streak[site] >= max_empty and site not in disabled:

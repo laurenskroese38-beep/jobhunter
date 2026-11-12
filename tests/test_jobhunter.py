@@ -541,3 +541,21 @@ def test_workday_multi_location_and_swiss_spellings():
     assert not filters.is_swiss("Geneva, NE, US") and not filters.is_swiss("Paris, FR")
     j = {"title": "Graduate Programme Manager 80-100%", "location": "Zurich", "description": ""}
     assert filters.evaluate(j, FCFG, True) is None
+
+
+def test_jobspy_transient_429_with_partial_results_keeps_going():
+    import logging as _l
+
+    def scrape_jobs(**kw):
+        term = kw["search_term"]
+        if term == "b":
+            _l.getLogger().error("response status code 429 (blocked: use a proxy)")
+        return pd.DataFrame([{"title": f"{term} intern", "company": "X", "location": "Zurich",
+                              "job_url": f"https://x/{term}", "site": "linkedin"}])
+    cfg = {"sites": ["linkedin"], "search_terms": ["a", "b", "c"], "locations": ["Switzerland"],
+           "delay_between_queries": [0, 0]}
+    state = {"done": set(), "blocked": set()}
+    out = jobspy_source.search(cfg, sleep=lambda s: None, scrape_jobs=scrape_jobs, state=state)
+    assert sorted(j["url"][-1] for j in out) == ["a", "b", "c"]     # « c » a bien été fait
+    assert state["blocked"] == {"linkedin"}                          # « b » sera refait
+    assert ("linkedin", "b", "Switzerland") not in state["done"]
