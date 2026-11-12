@@ -1,0 +1,204 @@
+# =====================================================================
+#  JobHunter — configuration
+#  Début de carrière en corporate finance / investissement en Suisse :
+#  stages, summer / off-cycle, graduate programmes, analyst / junior
+#  en M&A, investment banking, private equity, VC, asset management
+# =====================================================================
+
+database: data/jobs.sqlite
+output_dir: output
+active_days: 21          # une offre non revue depuis 21 jours sort du rapport
+
+# ---------------------------------------------------------------------
+# Comportement réseau (anti-blocage). Plus c'est lent, plus c'est sûr.
+# ---------------------------------------------------------------------
+politeness:
+  min_delay: 3           # secondes minimum entre 2 requêtes au même domaine
+  max_delay: 7           # délai tiré au hasard entre min et max
+  max_retries: 4         # sur 429 / 5xx / erreur réseau, avec backoff
+  max_failures_per_domain: 3   # au-delà : domaine ignoré jusqu'au prochain passage
+  respect_robots_txt: true     # pour les pages HTML (pas pour les API des ATS)
+  timeout: 25
+  # user_agent: "..."    # par défaut : un Chrome récent
+
+# ---------------------------------------------------------------------
+# Filtrage
+# ---------------------------------------------------------------------
+filters:
+  swiss_only: true
+  early_career_only: true    # écarte tout ce qui n'est pas stage / graduate / analyst / junior
+  include_associate: true    # « Associate » (PE/IB : 2-4 ans d'exp.) ; false pour l'écarter
+  # Niveaux à garder (supprime une ligne pour l'exclure) :
+  levels:
+    - Stage / Internship
+    - Graduate programme
+    - Analyst / Junior
+    - Associate
+  # Domaines à garder (supprime une ligne pour l'exclure). « Programme général »
+  # = stage / graduate programme d'une société cible sans domaine dans l'intitulé.
+  domains:
+    - M&A / Investment Banking
+    - Private Equity / VC / Private Markets
+    - Asset Management / Investments
+    - Wealth Management / Private Banking
+    - Programme général
+    - Finance (d'après la description)
+  min_score: 0
+  exclude_languages: [de]   # écarte les annonces rédigées en allemand
+  exclude_title:             # fonctions hors corporate finance, même dans une banque
+    - software
+    - developer
+    - développeur
+    - engineer
+    - devops
+    - data scientist
+    - cyber
+    - security
+    - technology
+    - informatik
+    - human resources
+    - ressources humaines
+    - talent acquisition
+    - recruit
+    - marketing
+    - communication
+    - design
+    - legal
+    - juriste
+    - lawyer
+    - compliance
+    - kyc
+    - aml
+    - audit
+    - tax
+    - fiscal
+    - steuer
+    - accounting
+    - comptab
+    - buchhalt
+    - payroll
+    - controlling
+    - operations
+    - middle office
+    - back office
+    - business analyst
+    - executive assistant
+    - team assistant
+    - assistante de direction
+    - administrative
+    - customer service
+    - customer support
+    - receptionist
+    - facility
+    - operational
+    - risk
+    - user support
+    - workstation
+    - architect
+    - analyst coverage
+    - recommendation
+    - translation
+    - language expert
+    - people & culture
+    - people and culture
+    - transfer pricing
+    - product control
+    - data analytics
+    - data analyst
+    - rfp
+    - heat pump
+    - bess
+    - governance
+    - payments
+    - transferring money
+    - sales
+    - vertrieb
+    - tech
+    - automation
+    - agentic
+    - generative ai
+    - ai engineer
+    - ai innovation
+    - responsabilite sociale
+    - csr
+    - phd
+    - ph.d
+    - doctoral
+    - doktorand
+    - /hr
+
+# ---------------------------------------------------------------------
+# Sites carrières
+# ---------------------------------------------------------------------
+ats:
+  detect_cache_days: 30      # méthode d'accès à chaque site mémorisée 30 jours
+  workday_max_pages: 3
+  detail_pages: 6            # fiches d'offres ouvertes par société (lieu, langue, date via JSON-LD)
+  workday_search_terms:      # Workday : recherche ciblée plutôt que tout lister
+    - intern
+    - internship
+    - stage
+    - graduate
+    - trainee
+    - summer
+    - off-cycle
+    - analyst
+    - junior
+
+# ---------------------------------------------------------------------
+# Sociétés : voir firms.yaml (liste exhaustive, une entrée par société)
+# ---------------------------------------------------------------------
+firms_file: firms.yaml
+
+careers:
+  parallel: 3           # navigateurs en parallèle (sociétés différentes, donc sites différents)
+  min_delay: 3          # pause aléatoire (s) entre deux pages d'un même navigateur
+  max_delay: 6
+  timeout: 30           # s max pour charger une page
+  settle: 6             # s max d'attente que la page ait fini de charger ses offres
+  browser_every_days: 1 # relire chaque site tous les N jours (2 = un jour sur deux)
+  resume_hours: 10      # passage interrompu puis relancé : sociétés lues depuis < 10 h non refaites
+
+# ---------------------------------------------------------------------
+# JobSpy (LinkedIn, Indeed) — sans compte, IP seulement
+# ---------------------------------------------------------------------
+jobspy:
+  enabled: true
+  sites: [linkedin, indeed]   # google renvoyait 0 résultat : retiré
+  locations: [Switzerland]
+  country_indeed: Switzerland
+  hours_old: 72               # passages quotidiens : 3 jours suffisent
+  first_run_hours_old: 720    # 1er passage (ou recherches modifiées) : 30 jours
+  results_wanted: 50
+  delay_between_queries: [25, 55]
+  proxies: []
+  search_terms:
+    # anglais
+    - M&A intern
+    - M&A analyst
+    - investment banking intern
+    - investment banking analyst
+    - corporate finance intern
+    - transaction services intern
+    - private equity intern
+    - private equity analyst
+    - venture capital intern
+    - asset management intern
+    - investment analyst intern
+    - summer analyst
+    - off-cycle internship
+    - graduate programme finance
+    - investment intern
+    - venture capital analyst
+    - private markets intern
+    - equity research intern
+    - graduate programme banking
+    - wealth management intern
+    - corporate finance analyst
+    - valuation intern
+    - private debt analyst
+    # français
+    - stage fusions acquisitions
+    - stage private equity
+    - stage finance d'entreprise
+    - stage gestion d'actifs

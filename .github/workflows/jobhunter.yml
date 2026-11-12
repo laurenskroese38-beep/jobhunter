@@ -1,0 +1,112 @@
+name: JobHunter
+
+on:
+  schedule:
+    # GitHub only understands UTC: both lines exist so the run is at 17:00 Swiss time
+    # all year round (the "gate" step below keeps the right one for summer/winter time).
+    - cron: "0 15 * * *"   # 17:00 in summer (CEST, UTC+2)
+    - cron: "0 16 * * *"   # 17:00 in winter (CET, UTC+1)
+  workflow_dispatch:        # "Run workflow" button in the Actions tab
+    inputs:
+      mode:
+        description: "full = LinkedIn/Indeed + e-mail alerts + career sites | sites | jobspy"
+        default: full
+        type: choice
+        options: [full, sites, jobspy]
+
+concurrency:
+  group: jobhunter
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Keep only the 17:00 (Zurich) trigger
+        id: gate
+        run: |
+          off=$(TZ=Europe/Zurich date +%z)          # +0100 in winter, +0200 in summer
+          want="0 16 * * *"; [ "$off" = "+0200" ] && want="0 15 * * *"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" != "$want" ]; then
+            echo "Not 17:00 in Zurich for this trigger (offset $off): skipping."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.go == 'true'
+
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.go == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Restore history (seen jobs, firm memory)
+        if: steps.gate.outputs.go == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: jobhunter-state-${{ github.run_id }}
+          restore-keys: jobhunter-state-
+
+      - name: Prepare
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          [ -f data/jobs.sqlite ] || cp data/seed.sqlite data/jobs.sqlite   # first run: start from the PC's history
+          rm -f data/.lock
+          # GitHub runners have more CPU than needed for 3 browsers: read 6 career sites at once
+          python - <<'PY'
+          import yaml
+          c = yaml.safe_load(open("config.yaml", encoding="utf-8"))
+          c.setdefault("careers", {})["parallel"] = 6
+          yaml.safe_dump(c, open("config.yaml", "w", encoding="utf-8"), allow_unicode=True, sort_keys=False)
+          PY
+
+      - name: Run
+        if: steps.gate.outputs.go == 'true'
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+          IMAP_HOST: ${{ secrets.IMAP_HOST }}
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+          IMAP_FOLDER: ${{ secrets.IMAP_FOLDER }}
+        run: |
+          mode="${{ github.event.inputs.mode || 'full' }}"
+          flags=""
+          [ "$mode" = "sites" ] && flags="--no-jobspy"
+          [ "$mode" = "jobspy" ] && flags="--no-sites"
+          python run.py $flags
+
+      - name: Save history
+        if: always() && steps.gate.outputs.go == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: jobhunter-state-${{ github.run_id }}
+
+      - name: Upload report (Excel) and logs
+        if: always() && steps.gate.outputs.go == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobhunter-report-${{ github.run_number }}
+          path: |
+            output/*.xlsx
+            logs/
+          retention-days: 30
+          if-no-files-found: warn
