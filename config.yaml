@@ -169,7 +169,7 @@ jobspy:
   country_indeed: Switzerland
   hours_old: 72               # passages quotidiens : 3 jours suffisent
   first_run_hours_old: 720    # 1er passage (ou recherches modifiées) : 30 jours
-  results_wanted: 50
+  results_wanted: 150   # 50 était atteint par toutes les recherches LinkedIn
   delay_between_queries: [25, 55]
   proxies: []
   search_terms:

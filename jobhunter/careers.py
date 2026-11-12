@@ -191,8 +191,10 @@ def _find_careers(b: br.Browser, s: PoliteSession, homepage: str) -> tuple[str |
             except DomainSuspended:
                 break
             except Exception:  # noqa: BLE001
-                continue
-            if r is not None and r.status_code == 200 and len(r.text) > 2000 \
+                break
+            if r is None:
+                break                     # site injoignable : inutile d'essayer 20 adresses
+            if r.status_code == 200 and len(r.text) > 2000 \
                     and urlparse(r.url).path.strip("/") \
                     and br.STRONG_CAREER.search(r.text[:200000]):
                 return r.url, "", sm_jobs  # vraie page carrière (pas une redirection vers l'accueil)
