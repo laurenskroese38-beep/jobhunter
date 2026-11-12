@@ -127,6 +127,8 @@ def jobspy_window(jcfg: dict, first_run: bool) -> int:
     bloqué), on remonte jusqu'au dernier passage complet + 1 jour, pour ne rien rater."""
     base = int(jcfg.get("hours_old", 72))
     longest = int(jcfg.get("first_run_hours_old", 720))
+    if os.getenv("JOBHUNTER_LOOKBACK_HOURS"):      # forcé (bouton « Run workflow »)
+        return int(os.environ["JOBHUNTER_LOOKBACK_HOURS"])
     if first_run:
         return longest
     try:

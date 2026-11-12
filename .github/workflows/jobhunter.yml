@@ -13,6 +13,10 @@ on:
         default: full
         type: choice
         options: [full, sites, jobspy]
+      lookback_days:
+        description: "LinkedIn/Indeed: how many days back (empty = automatic, since the last complete run)"
+        default: ""
+        type: string
 
 concurrency:
   group: jobhunter
@@ -86,11 +90,13 @@ jobs:
           IMAP_USER: ${{ secrets.IMAP_USER }}
           IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
           IMAP_FOLDER: ${{ secrets.IMAP_FOLDER }}
+          LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days }}
         run: |
           mode="${{ github.event.inputs.mode || 'full' }}"
           flags=""
           [ "$mode" = "sites" ] && flags="--no-jobspy"
           [ "$mode" = "jobspy" ] && flags="--no-sites"
+          [ -n "$LOOKBACK_DAYS" ] && export JOBHUNTER_LOOKBACK_HOURS=$((LOOKBACK_DAYS * 24))
           python run.py $flags
 
       - name: Save history
