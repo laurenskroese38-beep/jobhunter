@@ -2,10 +2,14 @@ name: JobHunter
 
 on:
   schedule:
-    # GitHub only understands UTC: both lines exist so the run is at 17:00 Swiss time
-    # all year round (the "gate" step below keeps the right one for summer/winter time).
-    - cron: "0 15 * * *"   # 17:00 in summer (CEST, UTC+2)
-    - cron: "0 16 * * *"   # 17:00 in winter (CET, UTC+1)
+    # GitHub only understands UTC and sometimes drops runs planned at the top of the hour,
+    # so there are several triggers around 17:00 Swiss time; the "gate" step lets through
+    # only the first one after 16:45 Zurich time that day (the others are skipped).
+    - cron: "47 14 * * *"
+    - cron: "47 15 * * *"
+    - cron: "17 16 * * *"
+    - cron: "47 16 * * *"
+    - cron: "17 18 * * *"
   workflow_dispatch:        # "Run workflow" button in the Actions tab
     inputs:
       mode:
@@ -24,24 +28,37 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
-      - name: Keep only the 17:00 (Zurich) trigger
+      - name: Run once a day, from 16:45 Zurich time
         id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          off=$(TZ=Europe/Zurich date +%z)          # +0100 in winter, +0200 in summer
-          want="0 16 * * *"; [ "$off" = "+0200" ] && want="0 15 * * *"
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" != "$want" ]; then
-            echo "Not 17:00 in Zurich for this trigger (offset $off): skipping."
-            echo "go=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "go=true" >> "$GITHUB_OUTPUT"
+          go=true
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            now=$(TZ=Europe/Zurich date +%H%M)
+            today=$(TZ=Europe/Zurich date +%Y-%m-%d)
+            if [ "$now" -lt 1645 ]; then
+              echo "Before 16:45 in Zurich ($now): skipping."; go=false
+            else
+              # a real scheduled run already started today after 16:45 (Zurich)? then skip.
+              # (runs stopped by this gate earlier in the day were created before 16:45)
+              n=$(TZ=Europe/Zurich gh run list -R "$GITHUB_REPOSITORY" --workflow jobhunter.yml \
+                    --event schedule --limit 20 --json databaseId,createdAt,conclusion \
+                    --jq "[.[] | select(.databaseId != ${{ github.run_id }})
+                           | select(.conclusion == \"success\" or .conclusion == \"\" or .conclusion == null)
+                           | select((.createdAt | fromdate | strflocaltime(\"%Y-%m-%d %H%M\")) >= \"$today 1645\")]
+                          | length" 2>/dev/null || echo 0)
+              if [ "${n:-0}" -gt 0 ]; then echo "Already ran today: skipping."; go=false; fi
+            fi
           fi
-
+          echo "go=$go" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         if: steps.gate.outputs.go == 'true'
 
