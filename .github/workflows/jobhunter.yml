@@ -47,10 +47,11 @@ jobs:
             if [ "$now" -lt 1645 ]; then
               echo "Before 16:45 in Zurich ($now): skipping."; go=false
             else
-              # a real scheduled run already started today after 16:45 (Zurich)? then skip.
+              # a real run (scheduled, or started by hand / by Claude's daily trigger) already
+              # started today after 16:45 (Zurich)? then skip.
               # (runs stopped by this gate earlier in the day were created before 16:45)
               n=$(TZ=Europe/Zurich gh run list -R "$GITHUB_REPOSITORY" --workflow jobhunter.yml \
-                    --event schedule --limit 20 --json databaseId,createdAt,conclusion \
+                    --limit 30 --json databaseId,createdAt,conclusion \
                     --jq "[.[] | select(.databaseId != ${{ github.run_id }})
                            | select(.conclusion == \"success\" or .conclusion == \"\" or .conclusion == null)
                            | select((.createdAt | fromdate | strflocaltime(\"%Y-%m-%d %H%M\")) >= \"$today 1645\")]
